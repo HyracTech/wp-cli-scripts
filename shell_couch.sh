@@ -285,7 +285,7 @@ echo  "----------------/n"
 #***Attaching WP sql exported databases to couchdb. Have each document with backup date as the id, then the attachment
 #*** Playing with the education and healthcare plugins --look at how wocli handles custom post types
 #*** Look at polling wp plugin, surveys and custom forms/contactform 7
-#Having our script run everytime there is a change in the wp database
+#Having our script run on boot and on shut down or every few minutes i.e cron, or see if we can listen for wp database changes
 
 
 #Checking for new wordpress posts and uploading to couchdb  --Done
