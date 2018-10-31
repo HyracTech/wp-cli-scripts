@@ -252,6 +252,51 @@ function attach_doc(){
 }
 
 
+#This function exports the current wp database, makes a new couchdb document and adds the exported sql file as an attachment
+function export_wp_db(){
+
+  local db="$1"
+
+  #Get the date
+  local DATE=`date '+%Y-%m-%d %H:%M:%S'` #gives date in 2018-10-31 11:30:34 format 
+
+  local id="$(date -d "$DATE" +"%Y%m%d%H%M%S")"  #gives date in 20181031113155 format
+
+  #First create a couchdb document with backup date as the id, then the attachment
+  curl -X PUT http://127.0.0.1:5984/"$db"/"$id" -d'{" type " : " wp_sql_db "}'
+
+  local rev_id="$(curl -X GET http://127.0.0.1:5984/"$db"/"$id" | jq -r '._rev')"  #use jq library to process json
+
+  echo "$rev_id"
+
+  #export the wp datase
+  #Get name of database and size and save to temporary file
+  wp db size --format=json --allow-root > db_name.json
+  local wp_sql_db_name="$(cat db_name.json | jq -r '.[].Name')"
+  #echo "$wp_sql_db"
+
+  #remove the temp file db_name.json
+  rm db_name.json
+  
+  #Create the name that the exported database will have
+  local exported_db_name="$wp_sql_db_name"_dbase-"$id".sql
+  #export wp db to the current folder
+  wp db export "$exported_db_name" --allow-root  
+
+  #curl -vX PUT http://127.0.0.1:5984/db_name/doc_id/filename?rev=doc_rev_id --data-binary @filename -H "Content-Type:type of the content"
+  #--data-binary@ - This option tells cURL to read a file’s contents into the HTTP request body.
+
+  #curl -vX PUT http://127.0.0.1:5984/"$db"/"$id"/en-gcf2015.png?rev="$rev_id" --data-binary @en-gcf2015.png -H "ContentType:#image/png"
+
+  curl -vX PUT http://127.0.0.1:5984/"$db"/"$id"/"$exported_db_name"?rev="$rev_id" --data-binary @"$exported_db_name" -H "ContentType: application/octet-stream"
+
+  #remove the exported database or in future you can move it to a databases folder
+  rm "$exported_db_name"
+
+  ##To request the whole file from couchdb easily run the following command
+  #curl -X GET http://127.0.0.1:5984/test/doc/file.txt
+  curl -X GET http://127.0.0.1:5984/"$db"/"$id"/"$exported_db_name"
+}
 
 
 # Making an array from a contents of a text file
@@ -282,11 +327,10 @@ echo  "----------------/n"
 #Examples on this site https://www.lullabot.com/articles/a-recipe-for-creating-couchdb-views
 #Writing a view to get the date modified fields
 #Working on writing wp posts from couchdb documents
-#***Attaching WP sql exported databases to couchdb. Have each document with backup date as the id, then the attachment
-#*** Playing with the education and healthcare plugins --look at how wocli handles custom post types
+#*** Playing with the education and healthcare plugins --look at how wpcli handles custom post types
 #*** Look at polling wp plugin, surveys and custom forms/contactform 7
 #Having our script run on boot and on shut down or every few minutes i.e cron, or see if we can listen for wp database changes
-
+#Install cozy cloud on a raspberry pi
 
 #Checking for new wordpress posts and uploading to couchdb  --Done
 #  -Always have a copy of post IDS
