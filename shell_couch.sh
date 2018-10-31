@@ -65,27 +65,135 @@ function insert_from_file(){
 
   curl -X PUT -H "Content-type: application/json" -d@temp_file.json http://127.0.0.1:5984/"$db"/"$id"
   #You can then delete the temp file
-  #rm temp_file.json
+  rm temp_file.json
 }
 
-#Convert all available worpress posts to couchdb documents
-function wp_posts_to_couch(){
+#Convert all available worpress posts to couchdb documents. This should only be run once in a new couchdb database
+#For posting additional wp posts to couch either use new_wp_posts_to_couch function or add each post individually
+#In future i could combine the two functions and check if we have a new couchdb database or not
 
+function wp_all_posts_to_couch(){
+  local db="$1"
+  
   #making a text file of post ids using wpcli
-  wp post list --field=ID --allow-root > id.txt
+  wp post list --field=ID --allow-root > wp_post_ids.txt
 
   #Make an array of ids from the text file created above
-  array=(`cat id.txt`)
+  array=(`cat wp_post_ids.txt`)
   echo " Length of Array: ${#array[@]}"
   
   for t in "${array[@]}"
   do
-    insert_from_file $t "database_name"
+    insert_from_file $t "$db"
     #echo $t
   done
   echo "Finished copying all the WP posts to couchdb documents!"
 
 } 
+
+
+#This will look if there are posts that are in WP and not in Couchdb and load them if there is.
+function new_wp_posts_to_couch(){
+  local db="$1"
+
+  #If number of couch documents in a database is 0 then its a new database
+  local number_of_couch_documents="$(curl -X GET localhost:5984/"$db" | jq '.doc_count')"
+
+  if [ "$number_of_couch_documents" -eq "0" ]
+  then
+        echo "This is a new database. It has $number_of_couch_documents documents."
+        #call the wp_all_posts_to_couch function
+        wp_all_posts_to_couch "$db"
+  elif [ "$number_of_couch_documents" -gt "0" ]
+  then
+        echo "This is an existing db with $number_of_couch_documents documents just check for wp posts that are not in couchdb and load them" 
+        #check if  an existing wp_post_ids.txt file exist
+        if [ -f wp_post_ids.txt ]
+        then
+          echo "the id text file exists"
+
+          #create a temporary file with the current ids from wordpress
+          wp post list --field=ID --allow-root > new_wp_post_ids.txt
+
+          new_ids_array=(`cat new_wp_post_ids.txt`)
+          old_ids_array=(`cat wp_post_ids.txt`)
+
+          diff_in_arrays=()
+          for i in "${new_ids_array[@]}"; do
+              skip=
+              for j in "${old_ids_array[@]}"; do
+                  [[ $i == $j ]] && { skip=1; break; }
+              done
+              [[ -n $skip ]] || diff_in_arrays+=("$i")
+          done
+
+          echo " Number of new documents in WP to be added to couchdb is: ${#diff_in_arrays[@]}"
+            if [ "${#diff_in_arrays[@]}" -ge "1" ]
+            then
+                for t in "${diff_in_arrays[@]}"
+                do
+                  insert_from_file $t "$db"
+                  #echo $t
+                done
+                echo "Finished copying all the WP posts to couchdb documents!"
+
+            else
+                echo "All your wp posts are already in couchdb so you good."
+            fi
+          #Remove the old wp_post_ids.txt and replace it with the current ids and keep the name
+          rm wp_post_ids.txt
+          mv new_wp_post_ids.txt  wp_post_ids.txt
+        else
+          echo "The wp_post_ids.txt does not exist THATS A RED FLAG CHECK THE CODE ABOVE THAT CALLS wp_all_posts_to_couch function"
+        fi
+  else
+        echo "This is not a new database. It has $number_of_couch_documents documents."
+        echo "If you get a 'null' double check the name of your database and make sure it exists"
+  fi
+
+}
+
+
+
+#This function checks for any posts modified in wp then updates the couchdb  equivalent document
+function sync_wp_couch_posts(){
+  local db="$1"
+  #call new_wp_posts_to_couch function first to make sure all wp posts are duplicated in the couchdb database
+  new_wp_posts_to_couch "$db"
+  
+  #check if  an existing wp_post_ids.txt file exist
+  if [ -f wp_post_ids.txt ]
+  then
+      
+        #Make an array of ids from the text file created above
+        local array=(`cat wp_post_ids.txt`)
+        echo " Total number of posts is: ${#array[@]}"
+
+        for t in "${array[@]}"
+        do
+          #echo $t
+           local wp_post_modified="$(wp post get $t --field=post_modified --allow-root)"
+           local couch_post_modified="$(curl -X GET http://127.0.0.1:5984/"$db"/"$t" | jq -r '.post_modified')"
+
+           local wp_post_modified_int=$(date -d "$wp_post_modified" +"%Y%m%d%H%M%S")
+           local couch_post_modified_int=$(date -d "$couch_post_modified" +"%Y%m%d%H%M%S")
+
+           if [ $wp_post_modified_int -gt $couch_post_modified_int ]; 
+           then
+             echo "Updating document ID: $t  !!!!!!!!!!";
+             #Update_doc function updates the couchdb document, its args are id and db, we pass $t for the id
+             update_doc "$t" "$db"
+           fi
+
+            echo "wp post ID$t : $wp_post_modified_int"
+            echo "couchdb post ID$t : $couch_post_modified_int"
+
+        done
+  
+  fi #closing for if [ -f wp_post_ids.txt ]
+  
+}
+
 
 
 #View a ducument from a database. you have to specify the id of the doc and the db
@@ -170,13 +278,17 @@ echo  "----------------/n"
 #Error checking and handling in the functions
 #Finish working on Update function
 # Use python to make Json files from bash commands then use curl to put the different info got into couchdb from a different bash script
-#Writing views to couchdb using curl
+#***Writing views to couchdb using curl
 #Examples on this site https://www.lullabot.com/articles/a-recipe-for-creating-couchdb-views
 #Writing a view to get the date modified fields
 #Working on writing wp posts from couchdb documents
-#Attaching WP sql exported databases to couchdb. Have each document with backup date as the id, then the attachment
+#***Attaching WP sql exported databases to couchdb. Have each document with backup date as the id, then the attachment
+#*** Playing with the education and healthcare plugins --look at how wocli handles custom post types
+#*** Look at polling wp plugin, surveys and custom forms/contactform 7
+#Having our script run everytime there is a change in the wp database
 
-#Checking for new wordpress posts and uploading to couchdb
+
+#Checking for new wordpress posts and uploading to couchdb  --Done
 #  -Always have a copy of post IDS
 #  -in a function read the text file and save the IDS in an array
 #  -make another array of current wordpress post IDS
@@ -193,6 +305,8 @@ echo  "----------------/n"
 # -get current date : DATE=`date '+%Y-%m-%d %H:%M:%S'`
 # -convert date and time to number : todate=$(date -d "$DATE" +"%Y%m%d%H%M%S")   or for just date todate=$(date -d "$DATE" +"%Y%m%d")
 # -
+
+#Nice shell guide on files https://www.cyberciti.biz/faq/unix-linux-test-existence-of-file-in-bash/
 
 
 
