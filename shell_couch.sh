@@ -331,7 +331,29 @@ echo  "----------------/n"
 #*** Look at polling wp plugin, surveys and custom forms/contactform 7
 #Having our script run on boot and on shut down or every few minutes i.e cron, or see if we can listen for wp database changes
 #Install cozy cloud on a raspberry pi
+#**Have a function to sync a binary file i.e  image/video to an uploads/media file in the remote machine using rsync
+#look for  a wordpress cloud storage plugin
+#Wordpress post content pulls images from wp-content/uploads. find a way to make that url relative if exported to couch
+#Also look at a plugin to rearrange the wp media folder: https://wpmayor.com/wp-media-folder-organize-sync-wordpress-media/
+#Have an online login app that will direct a person to a WP instance that has the db they are interested in 
+#Look at WP YOP Poll
+#Look at nextcloud images folder
 
+#Have the cloud operations handled with Nexcloud as usual, Adding photos e.t.c then sync the data folder to a server online
+#then find out how i can get the synced folder data to nextcloud. Also how to transfer the user data
+#could try syncing to the data folder an actual nextcloud instance
+
+#looks like the folder structure of nextcloud is nextcloud/data/username/files
+#-----------
+##create a large filesystem on another disk (or elsewhere), integrate it into Nextcloud using the external storage app 
+#and move the content there, which is how I manage my 42TB storage array whilst keeping it available via 
+#other means (CIFs, SFTP, etc)
+
+#config.php specifies the location.
+#If you just want to "point" to existing files and not have to reupload everything to NC, use the external storage option.
+
+#Guide to changing nextcloud data dir: https://help.nextcloud.com/t/howto-change-move-data-directory-after-installation/17170/12
+#-------------
 #Checking for new wordpress posts and uploading to couchdb  --Done
 #  -Always have a copy of post IDS
 #  -in a function read the text file and save the IDS in an array
